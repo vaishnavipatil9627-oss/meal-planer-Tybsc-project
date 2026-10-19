@@ -19,12 +19,13 @@ const rec=id=>R.find(r=>r.id==id);
 const toast=m=>{const t=$('#toast');t.textContent=m;t.style.display='block';setTimeout(()=>t.style.display='none',8000)};
 const cfg=()=>Object.assign({on:1,morning:'07:30',evening:'18:30',prep:1,preptime:'20:00',fast:'',name:user&&user.name||''},L('mp_cfg',{}));
 const plan=()=>L('mp_plan',{});
-function mealText(slot){const p=plan()[new Date().getDay()]||{};const r=rec(p[slot]);return r?r.n:'nothing planned yet'}
+function pick(d,slot){const m=(plan()[d.getDay()]||{})[slot];if(m)return m;const n=Math.floor(new Date(d.getFullYear(),d.getMonth(),d.getDate()).getTime()/864e5),u=eventsOn(d).some(e=>e.t=='u'),a=u?[1,2,3,8]:[4,5,6,7];return a[(n+(slot=='evening'?2:0))%4]}
+function mealText(slot){const r=rec(pick(new Date(),slot));return r?r.n:'-'}
 const PREP={1:"Soak sabudana 4-6 hours (overnight)",2:"Boil potatoes",3:"Boil potato, keep rajgira flour ready",4:"Buy fresh poha, peanuts, lemon",5:"Buy tomato/onion; soak dal 30 min before cooking",6:"Keep moong dal and vegetables ready",7:"Buy vegetables; plan to knead dough",8:"Boil potato, keep singhara flour ready"};
 const tmr=()=>{const t=new Date();t.setDate(t.getDate()+1);return t};
-function prepLines(t){const pl=plan()[t.getDay()]||{},l=[];['morning','evening'].forEach(s=>{const r=rec(pl[s]);if(r)l.push(r.n+': '+(PREP[r.id]||'Check ingredients, buy missing items'))});eventsOn(t).forEach(e=>l.push('Tomorrow: '+e.n+(e.t=='u'?' - keep upvas items ready (sabudana, sendha namak, potatoes, peanuts)':'')));return l}
+function prepLines(t){const l=[];['morning','evening'].forEach(s=>{const r=rec(pick(t,s));if(r)l.push(r.n+': '+(PREP[r.id]||'Check ingredients, buy missing items'))});eventsOn(t).forEach(e=>l.push('Tomorrow: '+e.n+(e.t=='u'?' - keep upvas items ready (sabudana, sendha namak, potatoes, peanuts)':'')));return l}
 function remind(slot,force){const c=cfg(),now=new Date(),k=`mp_fired_${D(now)}_${slot}`,tm=slot=='prep'?c.preptime:c[slot],hm=`${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')}`;
- if(!force&&(!c.on||(slot=='prep'&&!c.prep)||localStorage.getItem(k)||hm!==tm))return;
+ if(!force&&(!c.on||(slot=='prep'&&!c.prep)||localStorage.getItem(k)||(slot=='prep'?hm<tm:hm!==tm)))return;
  localStorage.setItem(k,1);let m;if(slot=='prep'){const l=prepLines(tmr());m='🥬 Prepare for tomorrow: '+(l.join(' | ')||'nothing planned')}else m=`${slot==='morning'?'🌅 Morning':'🌙 Evening'} meal: ${mealText(slot)}`;
  toast(m);if('Notification' in window&&Notification.permission==='granted')new Notification('Meal Planner',{body:m})}
 if(page!=='login'){setInterval(()=>{remind('morning');remind('evening');remind('prep')},20000)}
@@ -45,7 +46,7 @@ $('#hi').textContent=`Namaste, ${c.name||user.name}! ${DAYS[t.getDay()]}, ${t.to
 $('#today').innerHTML=`<p>🌅 <b>Morning:</b> ${mealText('morning')}</p><p>🌙 <b>Evening:</b> ${mealText('evening')}</p>`+(ev.length?`<p>${ev.map(e=>`<span class="tag ${e.t=='u'?'vrat':''}">${e.n}</span>`).join(' ')}</p>`:'');
 const up=events().filter(x=>x.d>D(t)).sort((a,b)=>a.d<b.d?-1:1).slice(0,3);
 $('#next').innerHTML=up.map(e=>`<li>${e.d} - ${e.n}</li>`).join('')||'<li>None</li>';
-const opts=s=>'<option value="">-</option>'+R.map(r=>`<option value="${r.id}" ${s==r.id?'selected':''}>${r.n}</option>`).join('');
+const opts=s=>'<option value="">Auto</option>'+R.map(r=>`<option value="${r.id}" ${s==r.id?'selected':''}>${r.n}</option>`).join('');
 const p=plan();$('#wk').innerHTML=DAYS.map((d,i)=>`<tr><td>${d}</td><td><select data-d="${i}" data-s="morning">${opts((p[i]||{}).morning)}</select></td><td><select data-d="${i}" data-s="evening">${opts((p[i]||{}).evening)}</select></td></tr>`).join('');
 $('#wk').onchange=e=>{const s=e.target.dataset,pl=plan();pl[s.d]=pl[s.d]||{};pl[s.d][s.s]=e.target.value;S('mp_plan',pl);location.reload()}}
 if(page==='recipes'){const draw=()=>{const q=$('#q').value.toLowerCase(),vo=$('#vo').checked;
@@ -58,7 +59,7 @@ function setMeal(id,slot){const pl=plan(),d=new Date().getDay();pl[d]=pl[d]||{};
 if(page==='shopping'){const draw=()=>{const s=L('mp_shop',[]);$('#items').innerHTML=s.map((x,i)=>`<li><label class="${x.done?'done':''}"><input type="checkbox" ${x.done?'checked':''} onchange="tick(${i})"> ${x.t}</label></li>`).join('')||'<li>List is empty.</li>'};
 window.tick=i=>{const s=L('mp_shop',[]);s[i].done^=1;S('mp_shop',s);draw()};
 $('#add').onclick=()=>{const v=$('#new').value.trim();if(!v)return;const s=L('mp_shop',[]);s.push({t:v,done:0});S('mp_shop',s);$('#new').value='';draw()};
-$('#fromPlan').onclick=()=>{const s=L('mp_shop',[]),p=plan();Object.values(p).forEach(d=>[d.morning,d.evening].forEach(id=>{if(id)rec(id).ing.forEach(i=>{if(!s.some(x=>x.t===i))s.push({t:i,done:0})})}));S('mp_shop',s);draw()};
+$('#fromPlan').onclick=()=>{const s=L('mp_shop',[]);for(let k=0;k<7;k++){const d=new Date();d.setDate(d.getDate()+k);['morning','evening'].forEach(sl=>rec(pick(d,sl)).ing.forEach(x=>{if(!s.some(y=>y.t===x))s.push({t:x,done:0})}))}S('mp_shop',s);draw()};
 $('#clr').onclick=()=>{S('mp_shop',L('mp_shop',[]).filter(x=>!x.done));draw()};draw()}
 if(page==='calendar'){let cur=new Date();cur.setDate(1);const draw=()=>{const y=cur.getFullYear(),m=cur.getMonth(),first=cur.getDay(),n=new Date(y,m+1,0).getDate(),td=D(new Date());
 $('#mt').textContent=cur.toLocaleString('default',{month:'long',year:'numeric'});let h=DAYS.map(d=>`<div class="h">${d.slice(0,3)}</div>`).join('')+'<div class="h"></div>'.repeat(first);
@@ -76,8 +77,16 @@ if(!r)box.innerHTML='<h1>Cooking steps</h1>'+R.map(x=>`<div class="card"><a href
 else{let i=0;box.innerHTML=`<h1>${r.n}</h1><div class="card"><h2>🥬 Prepare ahead</h2><p>${PREP[r.id]||'Check ingredients'}</p><h2>Ingredients</h2><ul style="list-style:none;padding:0">${r.ing.map(x=>`<li><label><input type="checkbox"> ${x}</label></li>`).join('')}</ul></div><div class="card"><div class="bar"><i id="pg"></i></div><div class="step" id="st"></div><div class="row"><button class="g" id="pv">Back</button><button id="nx">Next</button></div></div>`;
 const d=()=>{$('#st').innerHTML=`<small>Step ${i+1} of ${r.st.length}</small><br>${r.st[i]}`;$('#pg').style.width=(i+1)/r.st.length*100+'%';$('#nx').textContent=i==r.st.length-1?'Done ✓':'Next'};
 $('#pv').onclick=()=>{if(i>0)i--;d()};$('#nx').onclick=()=>{if(i<r.st.length-1)i++;else toast('Wah! Jevan tayar 🎉');d()};d()}}
-if(page==='settings'){$('#ics').onclick=()=>{const c=cfg(),pad=n=>String(n).padStart(2,'0'),ts=(d,t)=>D(d).replace(/-/g,'')+'T'+t.replace(':','')+'00',st=new Date().toISOString().replace(/[-:]/g,'').slice(0,15)+'Z',o=['BEGIN:VCALENDAR','VERSION:2.0','PRODID:-//MealPlanner//EN'];let u=0;
+function makeICS(){const c=cfg(),pad=n=>String(n).padStart(2,'0'),ts=(d,t)=>D(d).replace(/-/g,'')+'T'+t.replace(':','')+'00',st=new Date().toISOString().replace(/[-:]/g,'').slice(0,15)+'Z',o=['BEGIN:VCALENDAR','VERSION:2.0','PRODID:-//MealPlanner//EN'];let u=0;
 const ev=(d,t,s,x)=>o.push('BEGIN:VEVENT','UID:mp'+(u++)+'@mealplanner','DTSTAMP:'+st,'DTSTART:'+ts(d,t),'DURATION:PT15M','SUMMARY:'+s,'DESCRIPTION:'+x.replace(/\n/g,'\\n'),'BEGIN:VALARM','ACTION:DISPLAY','DESCRIPTION:'+s,'TRIGGER:PT0M','END:VALARM','END:VEVENT');
-for(let i=0;i<30;i++){const d=new Date();d.setDate(d.getDate()+i);const t=new Date(d);t.setDate(t.getDate()+1),pd=plan()[d.getDay()]||{};
-['morning','evening'].forEach(s=>{const r=rec(pd[s]);if(r)ev(d,c[s],(s=='morning'?'Morning: ':'Evening: ')+r.n,r.ing.join(', '))});const l=prepLines(t);if(l.length&&c.prep)ev(d,c.preptime,'Prepare for tomorrow',l.join('\n'))}
-o.push('END:VCALENDAR');const e=document.createElement('a');e.href=URL.createObjectURL(new Blob([o.join('\r\n')],{type:'text/calendar'}));e.download='meal-reminders.ics';e.click()}}
+for(let i=0;i<60;i++){const d=new Date();d.setDate(d.getDate()+i);const t=new Date(d);t.setDate(t.getDate()+1);
+['morning','evening'].forEach(s=>{const r=rec(pick(d,s));if(r)ev(d,c[s],(s=='morning'?'Morning: ':'Evening: ')+r.n,r.ing.join(', '))});const l=prepLines(t);if(l.length&&c.prep)ev(d,c.preptime,'Prepare for tomorrow',l.join('\n'))}
+o.push('END:VCALENDAR');const e=document.createElement('a');e.href=URL.createObjectURL(new Blob([o.join('\r\n')],{type:'text/calendar'}));e.download='meal-reminders.ics';e.click()}
+if(page==='settings')$('#ics').onclick=makeICS;
+
+if(page==='login'&&user)location.href='home.html';
+if('serviceWorker' in navigator&&location.protocol.startsWith('http'))navigator.serviceWorker.register('sw.js');
+
+if(page==='home'&&!localStorage.mp_setup){document.querySelector('main').insertAdjacentHTML('afterbegin','<div class="card" id="setup"><b>Turn on automatic reminders (one time)</b><p>After this, you do not need to select anything. The app suggests meals and reminds you a day before to prepare ingredients.</p><div class="row"><button id="s1">1. Allow notifications</button><button class="g" id="s2">2. Add to phone calendar</button><button class="g" id="s3">Done</button></div></div>');
+$('#s1').onclick=()=>'Notification' in window?Notification.requestPermission().then(p=>toast('Notifications: '+p)):toast('Not supported in this browser');$('#s2').onclick=makeICS;$('#s3').onclick=()=>{localStorage.mp_setup=1;$('#setup').remove()}}
+if(page!=='login')remind('prep');
